@@ -1,0 +1,53 @@
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import plotly.express as px
+import pandas as pd
+
+# Read the dataset from a CSV file
+df = pd.read_csv('Budget_data.csv')
+
+# Inspect the first few rows of the dataframe
+print(df.head())
+
+# Initialize the Dash app
+app = dash.Dash(__dashboard__)
+
+# Layout of the dashboard
+app.layout = html.Div([
+    html.H1("Personal_transactions.csv"),
+    dcc.Dropdown(
+        id='category-dropdown',
+        options=[{'label': category, 'value': category} for category in df['Category']],
+        value=df['Category'].iloc[0] 
+
+# Set default value to the first category in the list
+        clearable=False),
+    dcc.Graph(id='budget-pie-chart'),
+    dcc.Graph(id='budget-bar-chart')])
+
+# Callback to update pie chart
+@app.callback(
+    Output('budget-pie-chart', 'figure'),
+    [Input('category-dropdown', 'value')]
+)
+def update_pie_chart(selected_category):
+    fig = px.pie(df, names='Category', values='Budget', title='Budget Distribution')
+    return fig
+
+# Callback to update bar chart
+@app.callback(
+    Output('budget-bar-chart', 'figure'),
+    [Input('category-dropdown', 'value')]
+)
+def update_bar_chart(selected_category):
+    filtered_df = df[df['Category'] == selected_category]
+    fig = px.bar(filtered_df, x='Category', y='Budget', title=f'Budget for {selected_category}')
+    return fig
+
+# Run the app
+if __name__ == '__main__':
+    app.run_server(debug=True)
+python dashboard.py
+pandas.read_csv()
+
