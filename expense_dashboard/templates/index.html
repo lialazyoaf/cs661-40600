@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Expense Dashboard</h1>
+    
+    <!-- display data-->
+    <h2>Data</h2>
+    <table>
+        <tr>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Budget_Amount</th>
+            <th>Difference</th>
+        </tr>
+        {% for row in data %}
+        <tr>
+            <td>{{ row.Category }}</td>
+            <td>{{ row.Amount }}</td>
+            <td>{{ row.Date }}</td>
+            <td>{{ row.Budget_Amount }}</td>
+            <td>{{ row.Difference }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    
+    <!-- form for future data -->
+    <h2>Predict Future Expenditure</h2>
+    <form action="/predict" method="post">
+        <textarea name="future_data" rows="5" cols="50"></textarea>
+        <br>
+        <input type="hidden" name="model" value="{{ model }}">
+        <input type="submit" value="Predict">
+    </form>
+    
+    <!-- show predict result -->
+    {% if predictions %}
+    <h2>Predictions</h2>
+    <table>
+        <tr>
+            <th>Category</th>
+            <th>Predicted Amount</th>
+        </tr>
+        {% for prediction in predictions %}
+        <tr>
+            <td>{{ prediction.Category }}</td>
+            <td>{{ prediction.Predicted_Amount }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</body>
+</html>
