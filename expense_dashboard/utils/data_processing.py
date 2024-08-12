@@ -5,6 +5,8 @@
 # Description: This file is used preprocess the data.
 
 import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.stats import zscore
 
 # Load data from csv file
 def load_data(file_path):
@@ -44,6 +46,32 @@ def preprocess_data(data):
 
     return data
 
+# Handle outliers
+def handle_outliers(data):
+    '''Identify and handle outliers in the data'''
+    # using IQR method to detect outliers
+    Q1 = data['Amount'].quantile(0.25)
+    Q3 = data['Amount'].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    # Method 1: Capping outliers at the 95th percentile
+    upper_cap = data['Amount'].quantile(0.95)
+    data['Amount'] = data['Amount'].apply(lambda x: min(x, upper_cap))
+    
+    # Method 2: Log transformation (can comment out if not needed)
+    # data['Amount'] = np.log1p(data['Amount'])  # log1p is used to handle log(0) cases
+
+    # Method 3: Winsorization
+    # data['Amount'] = mstats.winsorize(data['Amount'], limits=[0.05, 0.05])
+
+    # Re-drawing the box plot to confirm the outliers have been handled
+    plt.boxplot(data['Amount'])
+    plt.ylim([0, 100])  # Adjust the range according to your data
+    plt.title('Box Plot of Amount After Outlier Handling')
+    plt.show()
+
 # Feature engineering
 def feature_engineering(data, budget_data):
     '''Perform feature engineering by associating categories with broad categories and merging with budget data.'''
@@ -69,16 +97,38 @@ def feature_engineering(data, budget_data):
             if category in keywords:
                 return broad_cat
         return 'Uncategorized'  # If no match found
-
+    
     # Apply the function to assign broad categories
     data['Broad_Category'] = data['Category'].apply(assign_broad_category)
-    # Adjust Amount: make outcome negative and income positive
+    
+    # Add new features based on date
+    data['Day_of_Week'] = data['Date'].dt.dayofweek  # Monday=0, Sunday=6
+    data['Is_Weekend'] = data['Day_of_Week'].apply(lambda x: 1 if x >= 5 else 0)
+    data['Quarter'] = data['Date'].dt.quarter
+    
+    # Adjust amount for income and expense
     data['Adjusted_Amount'] = data.apply(lambda row: row['Amount'] if row['Broad_Category'] == 'Income' else -row['Amount'], axis=1)
     
-    # Merge with budget data
-    merged_data = pd.merge(data, budget_data, how='left', left_on='Category', right_on='Category')
-    # Fill missing budget values with 0
-    merged_data['Budget'].fillna(0, inplace=True)
+    # Historical feature: Cumulative spending up to the current date
+    data['Cumulative_Spending'] = data.groupby(['Category'])['Adjusted_Amount'].cumsum()
+
+    # Interaction features: Example of interaction between Month and Category
+    data['Month_Category_Interaction'] = data['Month'].astype(str) + "_" + data['Category']
+
+    # Merge with budget data, using suffixes to avoid column name conflicts
+    merged_data = pd.merge(
+        data, 
+        budget_data, 
+        how='left', 
+        left_on='Category', 
+        right_on='Category', 
+        suffixes=('', '_budget')
+    )
+    # print after merge columns to check if the merge is successful
+    print("Columns after merge:", merged_data.columns)
+   
+    # Fill missing budget values with 0//using .loc and void using inplace=True to avoid future warning
+    merged_data.loc[:, 'Budget'] = merged_data['Budget'].fillna(0)
     # Calculate the difference between actual spending and budgeted amount
     merged_data['Difference'] = merged_data['Amount'] - merged_data['Budget']
     # Calculate balance
@@ -91,12 +141,13 @@ def monthly_summary_and_recommendations(data):
     '''Calculate monthly spending and generate recommendations'''
     # Group by Year, Month, and Category to get the monthly spending
     monthly_spending = data.groupby(['Year', 'Month', 'Category'])['Adjusted_Amount'].sum().reset_index()
+    
     # Calculate recommendations based on spending and budget
     recommendations = []
     for _, row in monthly_spending.iterrows():
         category = row['Category']
         month_spent = row['Adjusted_Amount']
-        budget = data.loc[data['Category'] == category, 'Budget'].values[0]
+        budget = data.loc[data['Category'] == category, 'Budget_budget'].values[0]
         
         if month_spent > budget:
             recommendation = f"Reduce spending on {category} by {month_spent - budget:.2f} next month."
@@ -114,4 +165,3 @@ def monthly_summary_and_recommendations(data):
     recommendations_df = pd.DataFrame(recommendations)
     
     return monthly_spending, recommendations_df
-

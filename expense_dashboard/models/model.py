@@ -4,15 +4,15 @@
 # DR. BRIAN HARLEY
 # Description: This file is used to define and train the model.
 
-import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score
-from utils.data_processing import preprocess_data, clean_data, feature_engineering
+import pandas as pd
 
+# Load and preprocess data function remains the same
 def load_and_preprocess_data(expenditure_file_path, budget_file_path):
-    expenditure_data = pd.read_csv('data/expenditure.csv')
-    budget_data = pd.read_csv('data/budget.csv')
+    expenditure_data = pd.read_csv(expenditure_file_path)
+    budget_data = pd.read_csv(budget_file_path)
     
     # Clean and preprocess data
     cleaned_data = clean_data(expenditure_data)
@@ -21,18 +21,45 @@ def load_and_preprocess_data(expenditure_file_path, budget_file_path):
     
     return featured_data
 
+# Hyperparameter tuning for Random Forest
+def optimize_random_forest(X_train, y_train):
+    # Define the parameter grid
+    param_grid = {
+        'n_estimators': [100, 200, 300],
+        'max_depth': [None, 10, 20, 30],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4],
+        'bootstrap': [True, False]
+    }
+
+    # Initialize the RandomForestRegressor
+    rf = RandomForestRegressor(random_state=42)
+
+    # Initialize GridSearchCV
+    grid_search = GridSearchCV(estimator=rf, param_grid=param_grid,
+                              cv=3, n_jobs=-1, verbose=2, scoring='r2')
+
+    # Fit the grid search
+    grid_search.fit(X_train, y_train)
+
+    # Print the best parameters and best score
+    print(f"Best Parameters: {grid_search.best_params_}")
+    print(f"Best R^2 Score: {grid_search.best_score_}")
+
+    return grid_search.best_estimator_
+
+# Training the model
 def train_model(data):
     # Create feature set and target variable
-    X = data[['Day', 'Month', 'Year', 'Category']]
+    X = data[['Day', 'Month', 'Year', 'Day_of_Week', 'Is_Weekend', 'Quarter', 'Cumulative_Spending']]
     X = pd.get_dummies(X)  # Convert categorical variables into dummy/indicator variables
     y = data['Adjusted_Amount']
     
     # Split data into training and test sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    # Initialize and train the model
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
+    # Optimize Random Forest model
+    model = optimize_random_forest(X_train, y_train)
     
     # Predict and evaluate the model
     y_pred = model.predict(X_test)
@@ -44,49 +71,11 @@ def train_model(data):
     
     return model
 
-def predict_future_expenditure(model, future_data):
-    # Preprocess future data
-    future_data = clean_data(future_data)
-    future_data = preprocess_data(future_data)
-    
-    # Create feature set
-    X_future = future_data[['Day', 'Month', 'Year', 'Category']]
-    X_future = pd.get_dummies(X_future)  # Convert categorical variables into dummy/indicator variables
-    
-    # Ensure the future data has the same columns as the training data
-    missing_cols = set(model.feature_importances_) - set(X_future.columns)
-    for c in missing_cols:
-        X_future[c] = 0
-    X_future = X_future.reindex(columns=model.feature_importances_, fill_value=0)
-    
-    # Make predictions
-    predictions = model.predict(X_future)
-    
-    future_data['Predicted_Amount'] = predictions
-    
-    return future_data
-
 # Example usage
 if __name__ == "__main__":
-    # Load and preprocess data
     expenditure_file_path = 'data/expenditure.csv'
-    budget_file_path = 'data/budget.csv'
+    budget_file_path = 'data/Budget.csv'
     data = load_and_preprocess_data(expenditure_file_path, budget_file_path)
     
-    # Train the model
+    # Train the optimized model
     model = train_model(data)
-    
-    # Example future data for prediction
-    future_data = pd.DataFrame({
-        'Date': ['01/01/2024', '02/01/2024'],
-        'Description': ['', ''],
-        'Amount': [0, 0],
-        'Transaction Type': ['', ''],
-        'Category': ['Groceries', 'Rent'],
-        'Account Name': ['', '']
-    })
-    
-    # Predict future expenditure
-    future_predictions = predict_future_expenditure(model, future_data)
-    print(future_predictions)
-
