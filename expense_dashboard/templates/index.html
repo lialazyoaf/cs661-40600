@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Expense Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <h1>Expense Dashboard</h1>
@@ -39,6 +40,25 @@
         <input type="submit" value="Predict">
     </form>
     
+    <!-- AI Q&A Section -->
+    <h2>Ask a Question</h2>
+    <form id="ai-form">
+        <input type="text" id="question" name="question" placeholder="Ask about your finances...">
+        <input type="button" id="ask-btn" value="Ask">
+    </form>
+    <div id="answer"></div>
+
+    <script>
+        $(document).ready(function(){
+            $("#ask-btn").click(function(){
+                var question = $("#question").val();
+                $.post("/ask", {question: question}, function(data){
+                    $("#answer").text("AI Response: " + data.response);
+                });
+            });
+        });
+    </script>
+
     <!-- show predict result -->
     {% if predictions %}
     <h2>Predictions</h2>

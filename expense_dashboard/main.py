@@ -7,18 +7,17 @@
 
 import sys
 import os
-
-# Add the parent directory to the system path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-
-from flask import Flask, render_template, request
+import openai
+from flask import Flask, render_template, request, jsonify
 import pandas as pd
 from io import StringIO
 from utils.data_processing import load_data, clean_data, preprocess_data, feature_engineering, monthly_summary_and_recommendations, handle_outliers
 from models.model import load_and_preprocess_data, train_model, predict_future_expenditure
 
 app = Flask(__name__)
+
+# Set up OpenAI API
+openai.api_key = "your_openai_api_key"
 
 # Load and preprocess data
 data = load_and_preprocess_data('data/expenditure.csv', 'data/budget.csv')
@@ -34,11 +33,10 @@ print(recommendations.head())
 @app.route('/')
 def index():
     try:
-        # Train model
         model = train_model(featured_data)
         return render_template('index.html', data=featured_data.to_dict(orient='records'), model=model)
     except Exception as e:
-        return f"Error in index route: {e}"
+        return render_template('error.html', error=str(e))
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -49,7 +47,19 @@ def predict():
         predictions = predict_future_expenditure(model, future_data)
         return render_template('index.html', predictions=predictions.to_dict(orient='records'))
     except Exception as e:
-        return f"Error in predict route: {e}"
+        return render_template('error.html', error=str(e))
+
+# New route for AI-based Q&A
+@app.route('/ask', methods=['POST'])
+def ask():
+    user_question = request.form.get('question')
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=f"You are an assistant in a financial app. {user_question}",
+        max_tokens=150
+    )
+    answer = response.choices[0].text.strip()
+    return jsonify({"response": answer})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=6002)
+    app.run(debug=True, port=6003)  # Changed the port to avoid conflicts

@@ -8,11 +8,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import zscore
 
-# Load data from csv file
+# Load data from CSV file
 def load_data(file_path):
-    '''Load data from csv file'''
-    data = pd.read_csv(file_path)
-    return data
+    '''Load data from CSV file'''
+    try:
+        data = pd.read_csv(file_path)
+        return data
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+        return None
 
 # Clean data
 def clean_data(data):
@@ -37,40 +41,62 @@ def preprocess_data(data):
     '''Preprocess data by formatting dates and extracting features'''
     # Convert 'Date' to datetime
     data['Date'] = pd.to_datetime(data['Date'], errors='coerce', format='%m/%d/%Y')
-    # Extract day, month and year from 'Date'
+    # Extract day, month, and year from 'Date'
     data['Day'] = data['Date'].dt.day
     data['Year'] = data['Date'].dt.year
     data['Month'] = data['Date'].dt.month
     # Drop rows where 'Date' could not be converted to datetime
     data.dropna(subset=['Date'], inplace=True)
-
+    
     return data
 
 # Handle outliers
 def handle_outliers(data):
     '''Identify and handle outliers in the data'''
-    # using IQR method to detect outliers
+    
+    # Describe the data to identify potential outliers
+    print("Summary statistics before handling outliers:")
+    print(data['Amount'].describe())
+    
+    # Visualize initial data distribution with a box plot
+    plt.figure(figsize=(8, 6))
+    plt.boxplot(data['Amount'], patch_artist=True, notch=True)
+    plt.title('Box Plot of Amount Before Outlier Handling')
+    plt.xlabel('Transactions')
+    plt.ylabel('Amount')
+    plt.grid(True)
+    plt.show()
+    
+    # Apply IQR method to detect and handle outliers
     Q1 = data['Amount'].quantile(0.25)
     Q3 = data['Amount'].quantile(0.75)
     IQR = Q3 - Q1
     lower_bound = Q1 - 1.5 * IQR
     upper_bound = Q3 + 1.5 * IQR
     
-    # Method 1: Capping outliers at the 95th percentile
-    upper_cap = data['Amount'].quantile(0.95)
-    data['Amount'] = data['Amount'].apply(lambda x: min(x, upper_cap))
+    # Capping outliers at the upper bound
+    data['Amount'] = data['Amount'].clip(lower_bound, upper_bound)
     
-    # Method 2: Log transformation (can comment out if not needed)
-    # data['Amount'] = np.log1p(data['Amount'])  # log1p is used to handle log(0) cases
-
-    # Method 3: Winsorization
-    # data['Amount'] = mstats.winsorize(data['Amount'], limits=[0.05, 0.05])
-
-    # Re-drawing the box plot to confirm the outliers have been handled
-    plt.boxplot(data['Amount'])
-    plt.ylim([0, 100])  # Adjust the range according to your data
+    # Redraw the box plot to confirm the outliers have been handled
+    print("Summary statistics after handling outliers:")
+    print(data['Amount'].describe())
+    
+    plt.figure(figsize=(8, 6))
+    plt.boxplot(data['Amount'], patch_artist=True, notch=True,
+                boxprops=dict(facecolor='lightblue', color='blue'),
+                medianprops=dict(color='red'),
+                whiskerprops=dict(color='blue'),
+                capprops=dict(color='blue'),
+                flierprops=dict(marker='o', color='orange', markersize=5))
+    
+    plt.ylim([0, data['Amount'].max() * 1.1])
     plt.title('Box Plot of Amount After Outlier Handling')
+    plt.xlabel('Transactions')
+    plt.ylabel('Amount')
+    plt.grid(True)
     plt.show()
+
+    return data
 
 # Feature engineering
 def feature_engineering(data, budget_data):
@@ -102,7 +128,7 @@ def feature_engineering(data, budget_data):
     data['Broad_Category'] = data['Category'].apply(assign_broad_category)
     
     # Add new features based on date
-    data['Day_of_Week'] = data['Date'].dt.dayofweek  # Monday=0, Sunday=6
+    data['Day_of_Week'] = data['Date'].dt.dayofweek
     data['Is_Weekend'] = data['Day_of_Week'].apply(lambda x: 1 if x >= 5 else 0)
     data['Quarter'] = data['Date'].dt.quarter
     
@@ -124,14 +150,11 @@ def feature_engineering(data, budget_data):
         right_on='Category', 
         suffixes=('', '_budget')
     )
-    # print after merge columns to check if the merge is successful
     print("Columns after merge:", merged_data.columns)
    
-    # Fill missing budget values with 0//using .loc and void using inplace=True to avoid future warning
-    merged_data.loc[:, 'Budget'] = merged_data['Budget'].fillna(0)
-    # Calculate the difference between actual spending and budgeted amount
+    # Fill missing budget values with 0
+    merged_data['Budget'] = merged_data['Budget'].fillna(0)
     merged_data['Difference'] = merged_data['Amount'] - merged_data['Budget']
-    # Calculate balance
     merged_data['Balance'] = merged_data['Adjusted_Amount'].cumsum()
 
     return merged_data
@@ -164,4 +187,6 @@ def monthly_summary_and_recommendations(data):
         })
     recommendations_df = pd.DataFrame(recommendations)
     
+    return monthly_spending, recommendations_df
+
     return monthly_spending, recommendations_df

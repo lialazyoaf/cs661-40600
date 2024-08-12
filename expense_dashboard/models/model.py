@@ -3,79 +3,83 @@
 # cs 661 - Python Programming(40600)
 # DR. BRIAN HARLEY
 # Description: This file is used to define and train the model.
-
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.linear_model import LinearRegression, RidgeCV
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 import pandas as pd
+from utils.data_processing import load_data, clean_data, preprocess_data, feature_engineering, handle_outliers
 
 # Load and preprocess data function remains the same
 def load_and_preprocess_data(expenditure_file_path, budget_file_path):
-    expenditure_data = pd.read_csv(expenditure_file_path)
-    budget_data = pd.read_csv(budget_file_path)
+    expenditure_data = load_data(expenditure_file_path)
+    budget_data = load_data(budget_file_path)
     
+    if expenditure_data is None or budget_data is None:
+        raise ValueError("Failed to load data. Please check the file paths and ensure the CSV files exist.")
+
     # Clean and preprocess data
     cleaned_data = clean_data(expenditure_data)
     processed_data = preprocess_data(cleaned_data)
+    
+    if processed_data is None:
+        raise ValueError("Data preprocessing failed.")
+    
+    # Handle outliers
+    processed_data = handle_outliers(processed_data)
+    
+    if processed_data is None:
+        raise ValueError("Outlier handling failed.")
+
+    # Feature engineering
     featured_data = feature_engineering(processed_data, budget_data)
+    
+    if featured_data is None:
+        raise ValueError("Feature engineering failed.")
     
     return featured_data
 
-# Hyperparameter tuning for Random Forest
-def optimize_random_forest(X_train, y_train):
-    # Define the parameter grid
-    param_grid = {
-        'n_estimators': [100, 200, 300],
-        'max_depth': [None, 10, 20, 30],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-        'bootstrap': [True, False]
-    }
-
-    # Initialize the RandomForestRegressor
-    rf = RandomForestRegressor(random_state=42)
-
-    # Initialize GridSearchCV
-    grid_search = GridSearchCV(estimator=rf, param_grid=param_grid,
-                              cv=3, n_jobs=-1, verbose=2, scoring='r2')
-
-    # Fit the grid search
-    grid_search.fit(X_train, y_train)
-
-    # Print the best parameters and best score
-    print(f"Best Parameters: {grid_search.best_params_}")
-    print(f"Best R^2 Score: {grid_search.best_score_}")
-
-    return grid_search.best_estimator_
-
-# Training the model
+# Training the Linear Regression model
 def train_model(data):
     # Create feature set and target variable
     X = data[['Day', 'Month', 'Year', 'Day_of_Week', 'Is_Weekend', 'Quarter', 'Cumulative_Spending']]
     X = pd.get_dummies(X)  # Convert categorical variables into dummy/indicator variables
     y = data['Adjusted_Amount']
     
-    # Split data into training and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Standardize the features
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
     
-    # Optimize Random Forest model
-    model = optimize_random_forest(X_train, y_train)
+    # Ridge regression with cross-validation
+    alphas = [0.1, 1.0, 10.0, 100.0]
+    model = RidgeCV(alphas=alphas, cv=5)
+    model.fit(X_scaled, y)
     
     # Predict and evaluate the model
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
+    y_pred = model.predict(X_scaled)
+    mse = mean_squared_error(y, y_pred)
+    r2 = r2_score(y, y_pred)
     
     print(f"Mean Squared Error: {mse:.2f}")
     print(f"R^2 Score: {r2:.2f}")
     
     return model
 
-# Example usage
-if __name__ == "__main__":
-    expenditure_file_path = 'data/expenditure.csv'
-    budget_file_path = 'data/Budget.csv'
-    data = load_and_preprocess_data(expenditure_file_path, budget_file_path)
-    
-    # Train the optimized model
-    model = train_model(data)
+# Predicting future expenditures
+def predict_future_expenditure(model, future_data):
+    # Preprocess future data (similar steps to what was done during training)
+    future_data = clean_data(future_data)
+    future_data = preprocess_data(future_data)
+
+    # Feature engineering for future data
+    future_data = feature_engineering(future_data, pd.DataFrame(columns=['Category', 'Budget']))
+
+    # Create feature set
+    X_future = future_data[['Day', 'Month', 'Year', 'Day_of_Week', 'Is_Weekend', 'Quarter', 'Cumulative_Spending']]
+    X_future = pd.get_dummies(X_future)  # Convert categorical variables into dummy/indicator variables
+
+    # Make predictions
+    predictions = model.predict(X_future)
+    future_data['Predicted_Amount'] = predictions
+
+    return future_data[['Date', 'Category', 'Predicted_Amount']]
